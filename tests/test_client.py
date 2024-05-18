@@ -50,9 +50,22 @@ async def test_post_400(api_client: APIClient) -> None:
     with respx.mock(base_url="http://invalid.test-node") as respx_mock:
         mocked_url = respx_mock.post("/v1/group/").respond(status_code=400, json={"detail": "The object exists."})
 
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            await api_client.post(group_id)
+        response_err = await api_client.post(group_id)
 
-        assert exc_info.value.response.status_code == 400
-        assert exc_info.value.response.json() == {"detail": "The object exists."}
+        assert response_err.response.status_code == 400
+        assert response_err.response.json() == {"detail": "The object exists."}
+        assert isinstance(response_err, httpx.HTTPStatusError)
+        assert mocked_url.called
+
+
+@pytest.mark.asyncio
+async def test_get_404(api_client: APIClient) -> None:
+    group_id = "123"
+    with respx.mock(base_url="http://invalid.test-node") as respx_mock:
+        mocked_url = respx_mock.get(f"/v1/group/{group_id}/").respond(status_code=404)
+
+        response_err = await api_client.get(group_id)
+
+        assert response_err.response.status_code == 404
+        assert isinstance(response_err, httpx.HTTPStatusError)
         assert mocked_url.called

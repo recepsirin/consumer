@@ -19,16 +19,22 @@ class APIClient:
             except httpx.HTTPStatusError as exc:
                 return exc
 
-    async def post(self, group_id: str) -> httpx.Response:
+    async def post(self, group_id: str) -> httpx.Response | httpx.HTTPStatusError:
         async with httpx.AsyncClient() as client:
-            url = f"{self.base_url}/{self.RESOURCE}/"
-            response = await client.post(url, json={"groupId": group_id})
-            response.raise_for_status()
-            return response
+            try:
+                url = f"{self.base_url}/{self.RESOURCE}/"
+                response = await client.post(url, json={"groupId": group_id})
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as exc:
+                return exc
 
-    async def delete(self, group_id: str) -> httpx.Response:
-        async with httpx.AsyncClient() as client:
-            url = f"{self.base_url}/{self.RESOURCE}/"
-            response = await client.request(method="DELETE", url=url, json={"groupId": group_id})
-            response.raise_for_status()
-            return response
+    async def delete(self, group_id: str) -> httpx.Response | httpx.HTTPStatusError:
+        try:
+            async with httpx.AsyncClient() as client:
+                url = f"{self.base_url}/{self.RESOURCE}/"
+                response = await client.request(method="DELETE", url=url, json={"groupId": group_id})
+                response.raise_for_status()
+                return response
+        except httpx.HTTPStatusError as exc:
+            return exc
