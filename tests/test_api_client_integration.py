@@ -5,11 +5,6 @@ import respx
 from consumer.client import APIClient
 
 
-@pytest.fixture
-def api_client() -> APIClient:
-    return APIClient(base_url="http://invalid.test-node")
-
-
 @pytest.mark.asyncio
 async def test_full_lifecycle(api_client: APIClient) -> None:
     group_id = "14"
