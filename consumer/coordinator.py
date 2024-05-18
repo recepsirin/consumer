@@ -73,6 +73,17 @@ class TransactionCoordinator:
         )
         return has_error and has_success
 
+    def _are_all_expected_responses(self, responses: Any, status_code: int) -> bool:
+        """
+        Check if all responses match the expected status code.
+        :param responses (Any): An iterable containing HTTP responses to be checked.
+        :param status_code (int): The expected HTTP status code to be matched.
+        :return: True if all responses match the expected status code, False otherwise.
+        """
+        return all(
+            isinstance(response, httpx.Response) and response.status_code == status_code for response in responses
+        )
+
     async def create(self, group_id: str) -> Coroutine | bool | tuple:
         """Creates given groupId on all nodes."""
         post_responses = await asyncio.gather(
@@ -96,11 +107,8 @@ class TransactionCoordinator:
             return await self.response_processor(
                 post_responses, expected_status_code=201, group_id=group_id, request_interface_come_from="POST"
             )  # proceed to rollback which means delete all
-        return (
-            SUCCESS
-            if all(isinstance(response, httpx.Response) and response.status_code == 201 for response in post_responses)
-            else not SUCCESS
-        )  # heavily relies on 201 status code, if other 2XX codes are possible consider them
+        return self._are_all_expected_responses(post_responses, 201)
+        # heavily relies on 201 status code, if other 2XX codes are possible consider them
 
     async def delete(self, group_id: str) -> Coroutine | tuple | bool:
         """Deletes given groupId from all nodes."""
@@ -124,7 +132,7 @@ class TransactionCoordinator:
             return await self.response_processor(
                 delete_responses, expected_status_code=200, group_id=group_id, request_interface_come_from="DELETE"
             )  # proceed to rollback which means create them
-        return delete_responses
+        return self._are_all_expected_responses(delete_responses, 200)
 
     async def response_processor(
         self, post_responses: Any, expected_status_code: int, group_id: str, request_interface_come_from: str
@@ -142,10 +150,7 @@ class TransactionCoordinator:
                         rollback_responses = await asyncio.gather(
                             *(client.delete(group_id) for client in success_clients), return_exceptions=True
                         )
-                        if all(
-                            isinstance(response, httpx.Response) and response.status_code == 200
-                            for response in rollback_responses
-                        ):
+                        if self._are_all_expected_responses(rollback_responses, 200):
                             # ALL SUCCESSFUL REQUESTS ARE ROLLED BACK
                             return True, "rollback success", "NOTHING CHANGED, REMAINS CONSISTENT"
             except RetryError:
@@ -161,17 +166,11 @@ class TransactionCoordinator:
                         rollback_responses = await asyncio.gather(
                             *(client.post(group_id) for client in success_clients), return_exceptions=True
                         )
-                        if all(
-                            isinstance(response, httpx.Response) and response.status_code == 201
-                            for response in rollback_responses
-                        ):
+                        if self._are_all_expected_responses(rollback_responses, 201):
                             # all successfull clients which are deleted successfully created back
                             ROLLBACK_SUCCESSFULL = True
                             return ROLLBACK_SUCCESSFULL, "rollback success"
-                        elif all(
-                            isinstance(response, httpx.HTTPStatusError) and response.response.status_code == 400
-                            for response in rollback_responses
-                        ):
+                        elif self._verify_status_code_exceptions(rollback_responses, 400):
                             ROLLBACK_SUCCESSFULL = True
                             return ROLLBACK_SUCCESSFULL, "rollback success | They are allready created"
             except RetryError:
