@@ -17,11 +17,13 @@ retry_strategy = Retrying(
 )
 
 # fmt: off
-HTTP_4XX_STATUS_CODES = (401, 402, 403, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419,
-                         420, 421, 422, 423, 424, 425, 426, 427, 428, 429, 431, 451)
+HTTP_4XX_STATUS_CODES = [401, 402, 403, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419,
+                         420, 421, 422, 423, 424, 425, 426, 427, 428, 429, 431, 451]
 # NOTE 400 and 404 is not included
 
-HTTP_5XX_STATUS_CODES = (500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511)
+HTTP_5XX_STATUS_CODES = [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511]
+
+
 # fmt: on
 
 
@@ -37,6 +39,40 @@ class TransactionCoordinator:
     def get_clients(self) -> Iterator[APIClient]:
         return (APIClient(host) for host in self.get_hosts_from_cluster())
 
+    def _verify_status_code_exceptions(self, responses: Any, status_codes: int | list[int]) -> bool:
+        """
+        Checks if all responses in the given list contain HTTP errors matching the provided status codes.
+
+        :param responses: A list of responses to check.
+        :param status_codes: An integer or a list of integers representing the status codes to match.
+        :return: True if all responses contain an error with a matching status code, False otherwise.
+        """
+        status_codes_set = {status_codes} if isinstance(status_codes, int) else set(status_codes)
+        return all(
+            isinstance(response, httpx.HTTPStatusError) and response.response.status_code in status_codes_set
+            for response in responses
+        )
+
+    def _check_responses_include_both_exceptions_and_successful_cases(
+        self, responses: Any, verified_status_code: int
+    ) -> bool:
+        """
+        Verifies if the given responses include both HTTP status errors and successful cases.
+        This method checks if there exists at least one instance of an HTTP status error among the responses
+        and at least one instance of a successful case (identified by a specific status code).
+
+        :param responses (Any): A collection of responses to check. Can be a list, tuple, etc.
+        :param verified_status_code (int): The status code indicating a successful response.
+
+        :return: True if both types of responses exist, False otherwise.
+        """
+        has_error = any(isinstance(response, httpx.HTTPStatusError) for response in responses)
+        has_success = any(
+            isinstance(response, httpx.Response) and response.status_code == verified_status_code
+            for response in responses
+        )
+        return has_error and has_success
+
     async def create(self, group_id: str) -> Coroutine | bool | tuple:
         """Creates given groupId on all nodes."""
         post_responses = await asyncio.gather(
@@ -46,22 +82,15 @@ class TransactionCoordinator:
             return_exceptions=True,  # Return exceptions instead of raising them
         )
         SUCCESS = True
-        if all(
-            isinstance(response, httpx.HTTPStatusError) and response.response.status_code == 400
-            for response in post_responses
-        ):
+        if self._verify_status_code_exceptions(post_responses, 400):
             # maybe log it no other action needed!
             # "EXCEPTION CASE == 400 | ALREADY EXISTS"
             return SUCCESS
-        if all(
-            isinstance(response, httpx.HTTPStatusError)
-            and response.response.status_code in HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES
-            for response in post_responses
-        ):
+        if self._verify_status_code_exceptions(post_responses, HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES):
             RETRY_TO_CREATE = True  # Needed bcz nothing created
             return RETRY_TO_CREATE
-        if any(isinstance(response, httpx.HTTPStatusError) for response in post_responses) and any(
-            isinstance(response, httpx.Response) and response.status_code == 201 for response in post_responses
+        if self._check_responses_include_both_exceptions_and_successful_cases(
+            post_responses, 201
         ):  # check if there is any exception
             # ROLLBACK NEEDED! AT LEAST ONE REQUEST CREATED AND AT LEAST ONE REQUEST FAILED
             return await self.response_processor(
@@ -84,22 +113,13 @@ class TransactionCoordinator:
         SUCCESS = True
         # return success all responses are 200, or 404 which means they are not in there
         # 404 means they are already deleted or not in there
-        if all(
-            isinstance(response, httpx.HTTPStatusError) and response.response.status_code == 404
-            for response in delete_responses
-        ):
+        if self._verify_status_code_exceptions(delete_responses, 404):
             # "EXCEPTION CASE == 404 | COULDN'T FOUND. INTENDED OPERATION WAS DELETE THEM FROM ALL NODES"
             return SUCCESS
-        if all(
-            isinstance(response, httpx.HTTPStatusError)
-            and response.response.status_code in (400,) + HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES
-            for response in delete_responses
-        ):
+        if self._verify_status_code_exceptions(delete_responses, [400] + HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES):
             RETRY_TO_CREATE = True  # Needed bcz nothing created
             return RETRY_TO_CREATE
-        if any(isinstance(response, httpx.HTTPStatusError) for response in delete_responses) and any(
-            isinstance(response, httpx.Response) and response.status_code == 200 for response in delete_responses
-        ):  # check if there is any exception and if one of them at least is succeeded
+        if self._check_responses_include_both_exceptions_and_successful_cases(delete_responses, 200):
             # ROLLBACK NEEDED! AT LEAST ONE REQUEST CREATED AND AT LEAST ONE REQUEST FAILED
             return await self.response_processor(
                 delete_responses, expected_status_code=200, group_id=group_id, request_interface_come_from="DELETE"
