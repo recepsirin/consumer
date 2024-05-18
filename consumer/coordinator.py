@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import configparser
 from collections.abc import Iterator
+from enum import Enum
 from typing import Any, Coroutine
 
 import httpx
@@ -25,6 +26,13 @@ HTTP_5XX_STATUS_CODES = [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 
 
 
 # fmt: on
+
+
+class TransactionState(Enum):
+    SUCCEEDED = "succeeded"
+    ROLLED_BACK = "rolled_back"
+    TO_BE_RETRIED = "to_be_retried"
+    FAILED = "failed"
 
 
 class TransactionCoordinator:
@@ -84,7 +92,7 @@ class TransactionCoordinator:
             isinstance(response, httpx.Response) and response.status_code == status_code for response in responses
         )
 
-    async def create(self, group_id: str) -> Coroutine | bool | tuple:
+    async def create(self, group_id: str) -> Coroutine | TransactionState | tuple:
         """Creates given groupId on all nodes."""
         post_responses = await asyncio.gather(
             self.client1.post(group_id),
@@ -92,14 +100,10 @@ class TransactionCoordinator:
             self.client3.post(group_id),
             return_exceptions=True,  # Return exceptions instead of raising them
         )
-        SUCCESS = True
         if self._verify_status_code_exceptions(post_responses, 400):
-            # maybe log it no other action needed!
-            # "EXCEPTION CASE == 400 | ALREADY EXISTS"
-            return SUCCESS
+            return TransactionState.SUCCEEDED  # already exists
         if self._verify_status_code_exceptions(post_responses, HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES):
-            RETRY_TO_CREATE = True  # Needed bcz nothing created
-            return RETRY_TO_CREATE
+            return TransactionState.TO_BE_RETRIED  # nothing created so retry
         if self._check_responses_include_both_exceptions_and_successful_cases(
             post_responses, 201
         ):  # check if there is any exception
@@ -107,10 +111,14 @@ class TransactionCoordinator:
             return await self.response_processor(
                 post_responses, expected_status_code=201, group_id=group_id, request_interface_come_from="POST"
             )  # proceed to rollback which means delete all
-        return self._are_all_expected_responses(post_responses, 201)
+        return (
+            TransactionState.SUCCEEDED
+            if self._are_all_expected_responses(post_responses, 201)
+            else TransactionState.FAILED
+        )
         # heavily relies on 201 status code, if other 2XX codes are possible consider them
 
-    async def delete(self, group_id: str) -> Coroutine | tuple | bool:
+    async def delete(self, group_id: str) -> Coroutine | tuple | TransactionState:
         """Deletes given groupId from all nodes."""
         delete_responses = await asyncio.gather(
             self.client1.delete(group_id),
@@ -118,21 +126,22 @@ class TransactionCoordinator:
             self.client3.delete(group_id),
             return_exceptions=True,  # Return exceptions instead of raising them
         )
-        SUCCESS = True
         # return success all responses are 200, or 404 which means they are not in there
         # 404 means they are already deleted or not in there
         if self._verify_status_code_exceptions(delete_responses, 404):
-            # "EXCEPTION CASE == 404 | COULDN'T FOUND. INTENDED OPERATION WAS DELETE THEM FROM ALL NODES"
-            return SUCCESS
+            return TransactionState.SUCCEEDED  # COULDN'T FOUND. INTENDED OPERATION WAS DELETE THEM FROM ALL NODES
         if self._verify_status_code_exceptions(delete_responses, [400] + HTTP_4XX_STATUS_CODES + HTTP_5XX_STATUS_CODES):
-            RETRY_TO_CREATE = True  # Needed bcz nothing created
-            return RETRY_TO_CREATE
+            return TransactionState.TO_BE_RETRIED
         if self._check_responses_include_both_exceptions_and_successful_cases(delete_responses, 200):
             # ROLLBACK NEEDED! AT LEAST ONE REQUEST CREATED AND AT LEAST ONE REQUEST FAILED
             return await self.response_processor(
                 delete_responses, expected_status_code=200, group_id=group_id, request_interface_come_from="DELETE"
             )  # proceed to rollback which means create them
-        return self._are_all_expected_responses(delete_responses, 200)
+        return (
+            TransactionState.SUCCEEDED
+            if self._are_all_expected_responses(delete_responses, 200)
+            else TransactionState.FAILED
+        )
 
     async def response_processor(
         self, post_responses: Any, expected_status_code: int, group_id: str, request_interface_come_from: str
@@ -152,12 +161,9 @@ class TransactionCoordinator:
                         )
                         if self._are_all_expected_responses(rollback_responses, 200):
                             # ALL SUCCESSFUL REQUESTS ARE ROLLED BACK
-                            return True, "rollback success", "NOTHING CHANGED, REMAINS CONSISTENT"
+                            return TransactionState.ROLLED_BACK
             except RetryError:
-                print("All rollback attempts failed. Registering it in a queue.", rollback_responses)
-                # Error Reporting and Logging, Alerting and Monitoring.
-                # Register the failure in a queue for later processing
-                # queue.append((group_id, success_clients, intended operation, failed_state))
+                return TransactionState.FAILED
         elif request_interface_come_from == "DELETE":
             # MAKE POST REQUESTS
             try:
@@ -167,18 +173,11 @@ class TransactionCoordinator:
                             *(client.post(group_id) for client in success_clients), return_exceptions=True
                         )
                         if self._are_all_expected_responses(rollback_responses, 201):
-                            # all successfull clients which are deleted successfully created back
-                            ROLLBACK_SUCCESSFULL = True
-                            return ROLLBACK_SUCCESSFULL, "rollback success"
+                            return TransactionState.ROLLED_BACK
                         elif self._verify_status_code_exceptions(rollback_responses, 400):
-                            ROLLBACK_SUCCESSFULL = True
-                            return ROLLBACK_SUCCESSFULL, "rollback success | They are allready created"
+                            return TransactionState.ROLLED_BACK
             except RetryError:
-                print("All rollback attempts failed. Registering it in a queue.", rollback_responses)
-                # Error Reporting and Logging, Alerting and Monitoring.
-                # Register the failure in a queue for later processing
-                # queue.append((group_id, success_clients, intended operation, failed_state))
-                return False
+                return TransactionState.FAILED
 
     async def coordinate(self) -> None:
         group_id = "4"
