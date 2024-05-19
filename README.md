@@ -91,3 +91,88 @@ Here are some potential options we can consider:
   - **mypy** enforces static type checking, ensuring type safety and correctness of type annotations.
   - **flake8** performs static code analysis to enforce coding standards and identify potential issues or violations.
   - **pre-commit hooks** configures to automatically run code formatting, linting, and other checks before each commit, ensuring that only properly formatted and validated code is committed to version control.
+
+
+
+## Build and Run
+
+Build and tag the dtc image from Dockerfile
+```bash
+docker build -t dtc:0.1 .
+```
+
+Run the dtc container
+```bash
+docker run -d -p 8000:8000 dtc:0.1
+```
+
+
+## Set up minikube
+
+[OPTIONAL]Download the latest Minikube binary for Linux in the current directory.
+If you're using a different operating system, you'll need to download the appropriate Minikube binary for that OS. You can find the download links and instructions for various operating systems on the Minikube GitHub releases page or the official Minikube website.
+```bash
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 \\n&& sudo install minikube-linux-amd64 /usr/local/bin/minikube\n
+```
+
+Start a local Kubernetes cluster using Minikube with the Docker driver.
+```bash
+minikube start --driver=docker
+```
+
+Check the status of the local Kubernetes cluster managed by Minikube. You should see that it is in the RUNNING state.
+```bash
+minikube status
+```
+
+[OPTIONAL]Open the Kubernetes dashboard for the local cluster managed by Minikube in a web browser.
+```bash
+minikube dashboard
+```
+
+## Deploy
+
+Deploy the application file defined in manifests/deployment.yaml
+```bash
+minikube kubectl -- apply -f manifests/deployment.yaml
+```
+
+Expected output:
+```deployment.apps/dtc-app created```
+
+
+Deploy the service file defined in manifests/service.yaml
+```bash
+minikube kubectl -- apply -f manifests/service.yaml
+```
+
+Expected output:
+```service/dtc-service created```
+
+
+Verify that your deployment and service are running correctly.
+
+Deployment:
+```bash
+minikube kubectl get deployments
+```
+
+Expected output:
+```
+NAME      READY   UP-TO-DATE   AVAILABLE   AGE
+dtc-app   0/3     3            0           5m58s
+```
+
+Deployment:
+```bash
+minikube kubectl get services
+```
+
+Expected output:
+```
+NAME          TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+dtc-service   ClusterIP   10.107.178.202   <none>        8000/TCP   2m40s
+kubernetes    ClusterIP   10.96.0.1        <none>        443/TCP    22h
+```
+
+Now you need to make the pod configurations.
