@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any
 
 import httpx
-from tenacity import RetryError, Retrying, stop_after_attempt, wait_exponential
+from tenacity import RetryError, Retrying, retry, retry_if_result, stop_after_attempt, wait_exponential
 
 from consumer.client import APIClient
 
@@ -185,6 +185,22 @@ class TransactionCoordinator:
         else:
             raise ValueError("Unregistered request method. Available methods: 'POST', 'DELETE'")
 
-    async def coordinate(self) -> None:
-        group_id = "4"
-        await self.create(group_id)
+    @retry(
+        stop=stop_after_attempt(3),
+        retry=retry_if_result(lambda result: result in [TransactionState.TO_BE_RETRIED, TransactionState.FAILED]),
+    )
+    async def coordinate(self, group_id: str, action: str) -> TransactionState:
+        """Coordinates a transaction for a specified group.
+        :param group_id: The ID of the group. (str)
+        :param action: The action to perform. Allowed actions: 'create', 'delete'. (str)
+        :return: The final state of the transaction. (TransactionState)
+        :raise: ValueError: If the provided action is not valid.
+        """
+        valid_actions = {"create", "delete"}
+        if action not in valid_actions:
+            raise ValueError("Invalid action. Allowed actions: 'create', 'delete'")
+
+        if action == "create":
+            return await self.create(group_id)
+        else:
+            return await self.delete(group_id)
