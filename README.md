@@ -17,6 +17,7 @@
 6. [Build and Run](#build-and-run)
 7. [Set up Minikube](#set-up-minikube)
 8. [Deploy](#deploy)
+9. [Setting and Running Locally via Poetry](#setting-and-running-locally)
 
 ## Context
 
@@ -77,9 +78,6 @@ Here are some potential options we can consider:
 5. **Retry with Exponential Backoff**: Adjust the retry strategy to incorporate exponential backoff, where the time between retry attempts increases exponentially with each retry. It alleviates pressure on the system and reduces the likelihood of overwhelming downstream services.
 
 6. **Manual Intervention**: In some cases, manual intervention may be necessary to address the underlying cause of the failure.
-
-
-
 
 
 
@@ -201,3 +199,54 @@ kubernetes    ClusterIP   10.96.0.1        <none>        443/TCP    22h
 ```
 
 Now you need to make the pod configurations.
+
+
+
+## Setting and Running Locally
+
+
+To create a virtual environment
+```bash
+poetry shell
+```
+
+To install dependencies
+```bash
+poetry install
+```
+
+[OPTIONAL]To build the application as a package via poetry if necessary
+```bash
+poetry build
+```
+
+To run tests
+```bash
+poetry run pytest
+```
+
+#### Test Reports
+To add coverage plugin
+```bash
+poetry add --dev pytest-cov
+```
+
+To generate test coverage report
+```bash
+poetry run pytest --cov
+```
+
+#### To Run
+
+##### You can either run it as an HTTP API via
+```bash
+poetry run uvicorn dtc_api:app --reload
+```
+
+##### or create a Python file, then call .coordinate() and attach it to an event loop.
+```bash
+try:
+    asyncio.run(TransactionCoordinator().coordinate(GROUPID, ACTION))
+except RetryError:
+    pass
+```
