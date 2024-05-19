@@ -4,8 +4,8 @@
 
 This documentation addresses the management of a cluster comprising three nodes, each hosting identical APIs.
 The cluster is susceptible to instability, potentially resulting in failures. Ensuring consistent application of actions across all nodes is crucial,
-particularly concerning POST and DELETE requests. In the event of a failure in any node, it is imperative to rollback actions across all nodes to apply system integrity,
-aiming for the most reliable request handling possible.
+particularly concerning POST and DELETE requests. In the event of a failure in any node, it is expected to rollback actions across all nodes to apply system integrity.
+It's aimed to achieve the most reliable request handling as possible.
 
 ### So, How Can We Deal With It?
 
@@ -19,13 +19,13 @@ Before delving into solutions and approaches, I'd like to briefly mention what t
 - **Rollback**: Conversely, a rollback undoes all changes made in a transaction, returning the database to its state before the transaction began. This is useful for recovering from errors or inconsistencies within a transaction.
 
 
-But, we don't have them in the context of HTTP requests and RESTful services, by the protocol's design!
+But, we don't have them in the context of HTTP requests and RESTful services, by the HTTP protocol's design!
 So, the concepts of "commit" and "rollback" as understood in databases and transactions do not directly apply. HTTP requests are stateless, meaning each request is independent and does not inherently carry forward the state of previous requests. Therefore, the mechanisms for managing transactions and their outcomes differ significantly from those in database management systems.
 
-And, we boil it all down, we have alternative approaches and strategies!!
+And, when we boil it all down, we have alternative approaches and strategies!
 
 
-#### Strategies for Managing Transactions in HTTP Services
+### Strategies for Managing Transactions in HTTP Services
 
 1. **Eventual Consistency and Retries**: One approach is to design services to achieve eventual consistency, where temporary inconsistencies are resolved over time through retries or compensating actions. This avoids the need for explicit commit or rollback mechanisms.
 
@@ -37,6 +37,25 @@ And, we boil it all down, we have alternative approaches and strategies!!
 
 5. **Circuit Breaker Pattern**: To prevent cascading failures, the circuit breaker pattern can be used. It detects failures and prevents further requests to a failing service, allowing it to recover before resuming normal operation.
 
-These approaches and strategies are generally used in API gateways and distributed transaction management. Since we know our API logic and I am personally a bit familiar with Saga execution coordinator, I would like to go for compensation transactions instead circuit break.
-I mean the circuit breaker pattern is focused on preventing cascading failures by temporarily suspending requests to failing services while compensation transactions are focused on maintaining data consistency in distributed transactions by executing compensating actions when part of the transaction fails. Both patterns are essential tools in the toolbox of distributed system architects and are often used in conjunction to build resilient and reliable systems.
-Yes, as we can understand both of them surely have trade-offs, but when it comes to flexibility and partial failure handling, by allowing partial failures and without needing to rollback entire transaction gets my biased perception comparatively to reduced latency that comes with circuit breaker!
+These approaches and strategies are commonly used in API gateways and distributed transaction management. Since we have an idea over our API logic and its behavior, and my personal experience with the Saga execution coordinator, I prefer compensation transactions over the circuit breaker pattern.
+The circuit breaker pattern focuses on preventing cascading failures by temporarily suspending requests to failing services. In contrast, compensation transactions prioritize maintaining data consistency in distributed transactions by executing compensating actions when part of the transaction fails.
+Both patterns are essential tools in the toolkit of distributed system architects and are often used together to construct resilient and reliable systems. While both have trade-offs, I'm biased towards compensation transactions due to their flexibility and ability to handle partial failures without necessitating a rollback of the entire transaction, compared to the reduced latency offered by the circuit breaker pattern.
+
+
+### What if all retry attempts fail
+
+It's important to have a fallback mechanism in place to provide the reliability as much as possible.
+
+Here are some potential options we can consider:
+
+1. **Error Reporting and Logging**: Ensure that comprehensive error reporting and logging mechanisms are in place to capture details about the failed requests and retries. It can be valuable for debugging and troubleshooting purposes.
+
+2. **Alerting and Monitoring**: Implement alerting and monitoring systems to notify relevant stakeholders about the failure. It allows for timely intervention and corrective actions to be taken.(Assume we also have an observability mechanism)
+
+3. **Graceful Degradation**: Implement graceful degradation by disabling or scaling back non-critical features or functionality temporarily. It allows our system to continue functioning with reduced capabilities until the issue can be resolved.
+
+4. **Automatic Rollback**: If applicable, consider implementing automatic rollback mechanisms to revert any partially completed transactions or operations to maintain data integrity and consistency.
+
+5. **Retry with Exponential Backoff**: Adjust the retry strategy to incorporate exponential backoff, where the time between retry attempts increases exponentially with each retry. It alleviates pressure on the system and reduces the likelihood of overwhelming downstream services.
+
+6. **Manual Intervention**: In some cases, manual intervention may be necessary to address the underlying cause of the failure.
