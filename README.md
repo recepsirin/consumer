@@ -18,6 +18,7 @@
 7. [Set up Minikube](#set-up-minikube)
 8. [Deploy](#deploy)
 9. [Setting and Running Locally via Poetry](#setting-and-running-locally)
+10. [TODO](#todo)
 
 ## Context
 
@@ -250,3 +251,9 @@ try:
 except RetryError:
     pass
 ```
+
+
+## TODO
+
+- [ ] Take action(s) for reporting: Logging, Sending Alerts; maybe, escalate_for_manual_intervention()
+- [ ] Refactor `TransactionCoordinator` class to remove code duplication.
