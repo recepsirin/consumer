@@ -1,4 +1,22 @@
-# API CONSUMER
+# API Consumer
+
+
+## Table of Contents
+
+1. [Context](#context)
+2. [Understanding Commit and Rollback in Databases](#understanding-commit-and-rollback-in-databases)
+3. [Strategies for Managing Transactions in HTTP Services](#strategies-for-managing-transactions-in-http-services)
+4. [What if all retry attempts fail](#what-if-all-retry-attempts-fail)
+5. [Design Decisions](#design-decisions)
+    - [APIClient Class](#apiclient-class)
+    - [asyncio.gather Usage](#asynciogather-usage)
+    - [TransactionCoordinator Class](#transactioncoordinator-class)
+    - [TransactionState Enumeration](#transactionstate-enumeration)
+    - [Retry Strategies](#retry-strategies)
+    - [Coding Style](#coding-style)
+6. [Build and Run](#build-and-run)
+7. [Set up Minikube](#set-up-minikube)
+8. [Deploy](#deploy)
 
 ## Context
 
@@ -61,30 +79,37 @@ Here are some potential options we can consider:
 6. **Manual Intervention**: In some cases, manual intervention may be necessary to address the underlying cause of the failure.
 
 
+
+
+
+
+
+
 ## Design Decisions
 
+### APIClient Class
 - **APIClient** class is implemented to encapsulate API logic and request design, providing dedicated interfaces for managing node-specific functionality with each instance.
 
-
+### asyncio.gather Usage
 - **asyncio.gather** is used to concurrently make requests to each node, treating them as individual units of work, and collecting their responses or errors.
 
-
+### TransactionCoordinator Class
 - **TransactionCoordinator** class  is implemented to coordinate transactions across multiple nodes within the cluster, ensuring eventual consistency in the system. By orchestrating transaction execution, tracking transaction states and implementing error handling and rollback mechanisms, it maintains a consistent state across all nodes over time. Through its management of transactional operations and state tracking, the TransactionCoordinator contributes to achieving eventual consistency, where the system converges to a consistent state despite any kind of failures.
 
-
+### TransactionState Enumeration
 - **TransactionState** is defined to help in effectively managing and tracking the state of transactions within the coordinator, enabling error handling, retries and compensations as needed.
   - **SUCCEEDED** Indicates that the transaction was successfully completed without any issues.
   - **ROLLED_BACK** Signifies that the transaction was partially successful but had to be rolled back due to some failure or inconsistency.
   - **TO_BE_RETRIED** Implies that the transaction encountered temporary issues or failures and needs to be retried.
   - **FAILED: Indicates** that the transaction failed to complete successfully and cannot proceed further.
 
-
+### Retry Strategies
 - **Exponential Backoff Retry Strategy** is implemented with tenacity library that utilizes exponential backoff to retry transactions up to a maximum number of attempts, with increasing wait times between retries.
 
 
 - **Conditional Retry Strategy** is implemented with again tenacity that retries transactions based on specified conditions. It retries transactions if the result is either TransactionState.TO_BE_RETRIED or TransactionState.FAILED.
 
-
+### Coding Style
 - **Style**
   - **black:** minimizes debates over code formatting preferences and enhances code readability.
   - **isort:** sorts and groups imports, ensuring a clean and consistent import layout.
