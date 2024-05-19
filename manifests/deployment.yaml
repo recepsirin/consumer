@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dtc-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dtc-app
+  template:
+    metadata:
+      labels:
+        app: dtc-app
+    spec:
+      containers:
+      - name: dtc
+        image: dtc:0.1
+        ports:
+        - containerPort: 8000

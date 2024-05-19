@@ -1,0 +1,24 @@
+# Python-specific files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment directories
+venv/
+.env/
+.venv/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+
+# Miscellaneous
+.DS_Store
+*.log
+*.bak
+*.tmp
+
+# Ignore Kubernetes manifests
+manifests/
