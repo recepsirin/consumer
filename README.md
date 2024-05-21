@@ -156,6 +156,11 @@ minikube dashboard
 
 ## Deploy
 
+Load the image
+```bash
+minikube image load dtc:0.1
+```
+
 Deploy the application file defined in manifests/deployment.yaml
 ```bash
 minikube kubectl -- apply -f manifests/deployment.yaml
@@ -184,10 +189,10 @@ minikube kubectl get deployments
 Expected output:
 ```
 NAME      READY   UP-TO-DATE   AVAILABLE   AGE
-dtc-app   0/3     3            0           5m58s
+dtc-app   3/3     3            3           3d
 ```
 
-Deployment:
+Services:
 ```bash
 minikube kubectl get services
 ```
@@ -199,9 +204,19 @@ dtc-service   ClusterIP   10.107.178.202   <none>        8000/TCP   2m40s
 kubernetes    ClusterIP   10.96.0.1        <none>        443/TCP    22h
 ```
 
-Now you need to make the pod configurations.
 
+Get pods:
+```bash
+ minikube kubectl get pods
+ ```
 
+Expected output:
+```
+NAME                       READY   STATUS    RESTARTS      AGE
+dtc-app-6b76744fd4-2lrd4   1/1     Running   1 (19h ago)   28h
+dtc-app-6b76744fd4-bbxrk   1/1     Running   1 (19h ago)   28h
+dtc-app-6b76744fd4-bfhlq   1/1     Running   1 (19h ago)   28h
+```
 
 ## Setting and Running Locally
 

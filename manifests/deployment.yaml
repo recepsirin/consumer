@@ -15,5 +15,6 @@ spec:
       containers:
       - name: dtc
         image: dtc:0.1
+        imagePullPolicy: Never
         ports:
         - containerPort: 8000
